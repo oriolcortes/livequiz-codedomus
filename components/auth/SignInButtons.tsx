@@ -10,8 +10,7 @@ export function SignInButtons() {
   async function signIn(provider: "google" | "azure") {
     setLoadingProvider(provider);
     const supabase = createClient();
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || window.location.origin;
-    const redirectTo = `${siteUrl}/auth/callback`;
+    const redirectTo = `${window.location.origin}/auth/callback`;
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
