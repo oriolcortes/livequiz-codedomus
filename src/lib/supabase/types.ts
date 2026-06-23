@@ -26,6 +26,7 @@ export type Database = {
           role?: "free" | "trusted" | "owner";
           updated_at?: string;
         };
+        Relationships: [];
       };
       rooms: {
         Row: {
@@ -56,15 +57,16 @@ export type Database = {
           status?: "active" | "ended" | "expired";
           ended_at?: string | null;
         };
+        Relationships: [];
       };
     };
-    Views: never;
-    Functions: never;
+    Views: {};
+    Functions: {};
     Enums: {
       app_role: "free" | "trusted" | "owner";
       room_status: "active" | "ended" | "expired";
     };
-    CompositeTypes: never;
+    CompositeTypes: {};
   };
 };
 
