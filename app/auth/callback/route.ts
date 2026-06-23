@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { createClient } from "@/src/lib/supabase/server";
+import { createServerClient } from "@supabase/ssr";
+import { getSupabaseEnv } from "@/src/lib/supabase/env";
+import type { Database } from "@/src/lib/supabase/types";
 
 function getSafeNextPath(value: string | null) {
   if (!value || !value.startsWith("/") || value.startsWith("//")) return "/dashboard";
@@ -21,12 +23,25 @@ export async function GET(request: NextRequest) {
     return redirectWithoutCache("/login?error=missing_code", url.origin);
   }
 
-  const supabase = await createClient();
+  const response = redirectWithoutCache(next, url.origin);
+  const { url: supabaseUrl, key } = getSupabaseEnv();
+  const supabase = createServerClient<Database>(supabaseUrl, key, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
+      },
+      setAll(cookiesToSet, headers) {
+        cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+        Object.entries(headers).forEach(([key, value]) => response.headers.set(key, value));
+      }
+    }
+  });
+
   const { error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
     return redirectWithoutCache(`/login?error=${encodeURIComponent(error.message)}`, url.origin);
   }
 
-  return redirectWithoutCache(next, url.origin);
+  return response;
 }
