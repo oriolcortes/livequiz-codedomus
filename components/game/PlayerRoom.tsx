@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { Input } from "@/components/ui/Input";
+import { PlayerHeaderCard, PlayerJoinCard, PlayerQuestionCard } from "@/components/game/PlayerRoomPanels";
+import { RankingList } from "@/components/game/RankingList";
 import { createClient } from "@/src/lib/supabase/browser";
 import { realtimeEvents, type AnswerResultPayload, type PlayerQuestionPayload, type RankingEntry, type RoomStatePayload } from "@/src/lib/realtime/events";
 import type { Room } from "@/src/lib/supabase/types";
@@ -23,9 +22,11 @@ export function PlayerRoom({ room }: { room: Pick<Room, "code" | "max_students" 
   const [joined, setJoined] = useState(false);
   const [question, setQuestion] = useState<PlayerQuestionPayload | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
+  const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [score, setScore] = useState(0);
   const [message, setMessage] = useState("Espera que el professor iniciï la partida.");
   const [ranking, setRanking] = useState<RankingEntry[]>([]);
+  const [channelReady, setChannelReady] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   useEffect(() => {
@@ -60,16 +61,21 @@ export function PlayerRoom({ room }: { room: Pick<Room, "code" | "max_students" 
         const data = payload as AnswerResultPayload;
         if (data.studentId !== studentId) return;
         setScore((current) => current + data.points);
-        setMessage(data.correct ? `Correcte! +${data.points} punts` : "Incorrecte");
+        setMessage(data.correct ? `Correcte! +${data.points} punts` : "Incorrecte o fora de temps");
       })
       .on("broadcast", { event: realtimeEvents.rankingUpdated }, ({ payload }) => {
-        setRanking((payload as { entries: RankingEntry[] }).entries ?? []);
+        const entries = (payload as { entries: RankingEntry[] }).entries ?? [];
+        setRanking(entries);
+        setScore(entries.find((entry) => entry.studentId === studentId)?.score ?? 0);
       })
       .on("broadcast", { event: realtimeEvents.roomState }, ({ payload }) => {
         const data = payload as RoomStatePayload & { targetStudentId?: string };
         if (data.targetStudentId && data.targetStudentId !== studentId) return;
         if (data.question) setQuestion(data.question);
-        if (data.ranking) setRanking(data.ranking);
+        if (data.ranking) {
+          setRanking(data.ranking);
+          setScore(data.ranking.find((entry) => entry.studentId === studentId)?.score ?? 0);
+        }
         if (data.status === "ended") setMessage("Partida finalitzada.");
       })
       .on("broadcast", { event: realtimeEvents.quizEnded }, ({ payload }) => {
@@ -79,6 +85,7 @@ export function PlayerRoom({ room }: { room: Pick<Room, "code" | "max_students" 
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
+          setChannelReady(true);
           await channel.track({ role: "student", studentId, at: new Date().toISOString() });
           await channel.send({ type: "broadcast", event: realtimeEvents.roomStateRequested, payload: { studentId } });
         }
@@ -88,8 +95,31 @@ export function PlayerRoom({ room }: { room: Pick<Room, "code" | "max_students" 
     return () => {
       void supabase.removeChannel(channel);
       channelRef.current = null;
+      setChannelReady(false);
     };
   }, [room.code, studentId, supabase]);
+
+  useEffect(() => {
+    if (!question) {
+      setRemainingSeconds(0);
+      return;
+    }
+
+    const activeQuestion = question;
+
+    function updateRemainingTime() {
+      const endsAt = activeQuestion.startedAt + activeQuestion.time * 1000;
+      const nextRemainingSeconds = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
+      setRemainingSeconds(nextRemainingSeconds);
+      if (nextRemainingSeconds === 0 && selected === null) {
+        setMessage("Temps esgotat.");
+      }
+    }
+
+    updateRemainingTime();
+    const interval = window.setInterval(updateRemainingTime, 250);
+    return () => window.clearInterval(interval);
+  }, [question, selected]);
 
   async function joinRoom() {
     const cleanNickname = nickname.trim().slice(0, 24);
@@ -107,7 +137,7 @@ export function PlayerRoom({ room }: { room: Pick<Room, "code" | "max_students" 
   }
 
   async function answer(optionIndex: number) {
-    if (!question || !channelRef.current || selected !== null) return;
+    if (!question || !channelRef.current || selected !== null || remainingSeconds <= 0) return;
     setSelected(optionIndex);
     setMessage("Resposta enviada.");
 
@@ -126,66 +156,22 @@ export function PlayerRoom({ room }: { room: Pick<Room, "code" | "max_students" 
 
   if (!joined) {
     return (
-      <div className="mx-auto max-w-md py-10">
-        <Card>
-          <p className="text-sm font-semibold text-brand-600">Sala {room.code}</p>
-          <h1 className="mt-2 text-3xl font-black">Entra al quiz</h1>
-          <p className="mt-2 text-sm text-slate-600">No cal login. Escriu un nickname curt.</p>
-          <div className="mt-6 grid gap-3">
-            <Input value={nickname} maxLength={24} placeholder="Nickname" onChange={(event) => setNickname(event.target.value)} />
-            <Button onClick={joinRoom} disabled={!nickname.trim()}>Entrar</Button>
-          </div>
-          <p className="mt-4 text-sm text-slate-500">{message}</p>
-        </Card>
-      </div>
+      <PlayerJoinCard
+        code={room.code}
+        nickname={nickname}
+        message={message}
+        channelReady={channelReady}
+        onNicknameChange={setNickname}
+        onJoin={() => void joinRoom()}
+      />
     );
   }
 
   return (
     <div className="mx-auto grid max-w-3xl gap-6 py-8">
-      <Card>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-sm font-semibold text-brand-600">{nickname}</p>
-            <h1 className="text-3xl font-black">Sala {room.code}</h1>
-          </div>
-          <div className="rounded-2xl bg-brand-50 px-4 py-3 text-right">
-            <p className="text-xs text-slate-500">Punts</p>
-            <p className="text-2xl font-black text-brand-700">{score}</p>
-          </div>
-        </div>
-      </Card>
-
-      <Card>
-        {question ? (
-          <>
-            <p className="text-sm font-semibold text-brand-600">Pregunta {question.index + 1} · {question.time}s</p>
-            <h2 className="mt-3 text-3xl font-black tracking-tight">{question.text}</h2>
-            <div className="mt-6 grid gap-3">
-              {question.options.map((option, index) => (
-                <Button key={`${question.id}-${option}`} variant={selected === index ? "primary" : "secondary"} disabled={selected !== null} onClick={() => answer(index)} className="justify-start py-4 text-left">
-                  {String.fromCharCode(65 + index)}. {option}
-                </Button>
-              ))}
-            </div>
-          </>
-        ) : (
-          <div className="rounded-3xl bg-slate-50 p-8 text-center text-slate-600">{message}</div>
-        )}
-        <p className="mt-4 text-sm font-semibold text-slate-600">{message}</p>
-      </Card>
-
-      <Card>
-        <h2 className="text-xl font-black">Rànquing</h2>
-        <div className="mt-4 grid gap-2">
-          {ranking.slice(0, 8).map((entry, index) => (
-            <div key={entry.studentId} className="flex justify-between rounded-2xl bg-white p-3 ring-1 ring-slate-100">
-              <span className="font-semibold">#{index + 1} {entry.nickname}</span>
-              <span className="font-black text-brand-600">{entry.score}</span>
-            </div>
-          ))}
-        </div>
-      </Card>
+      <PlayerHeaderCard code={room.code} nickname={nickname} score={score} />
+      <PlayerQuestionCard question={question} selected={selected} remainingSeconds={remainingSeconds} message={message} onAnswer={(optionIndex) => void answer(optionIndex)} />
+      <RankingList entries={ranking} limit={8} />
     </div>
   );
 }
