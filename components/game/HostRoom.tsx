@@ -18,7 +18,8 @@ export function HostRoom({ room }: { room: Room }) {
     ranking,
     loadQuizFile,
     startQuestion,
-    endQuiz
+    endQuiz,
+    closeRoom
   } = useHostRoomController(room);
 
   return (
@@ -38,6 +39,7 @@ export function HostRoom({ room }: { room: Room }) {
           pending={pending}
           status={status}
           onEndQuiz={endQuiz}
+          onCloseRoom={closeRoom}
           onStartQuestion={startQuestion}
         />
         <RankingList entries={ranking} />

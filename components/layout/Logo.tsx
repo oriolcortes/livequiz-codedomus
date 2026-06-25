@@ -13,7 +13,7 @@ export function Logo({
       className="focus-ring inline-flex items-center gap-3 rounded-2xl"
     >
       <Image
-        src="/livequiz-logo-small.png"
+        src="/livequiz-logo-small.webp"
         alt="LiveQuiz by CodeDomus"
         width={180}
         height={64}

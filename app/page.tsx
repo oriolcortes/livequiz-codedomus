@@ -4,8 +4,33 @@ import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { GLOBAL_LIMITS, ROLE_LIMITS } from "@/src/config/limits";
+import { createClient } from "@/src/lib/supabase/server";
 
-export default function HomePage() {
+function startOfMonth() {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+}
+
+export default async function HomePage() {
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  const now = new Date().toISOString();
+
+  const [{ count: activeRooms }, { count: monthlyQuizzes }] = await Promise.all([
+    supabase
+      .from("rooms")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "active")
+      .gt("expires_at", now),
+    userData.user
+      ? supabase
+          .from("rooms")
+          .select("id", { count: "exact", head: true })
+          .eq("host_id", userData.user.id)
+          .gte("created_at", startOfMonth())
+      : Promise.resolve({ count: 0 })
+  ]);
+
   return (
     <div className="grid gap-10 py-10 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
       <section>
@@ -32,12 +57,12 @@ export default function HomePage() {
         <Image src="/livequiz-logo.png" alt="LiveQuiz" width={720} height={400} priority className="mx-auto h-auto w-full max-w-lg rounded-3xl" />
         <div className="mt-6 grid grid-cols-2 gap-3 text-sm">
           <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-100">
-            <p className="text-slate-500">Free</p>
-            <p className="text-2xl font-black text-slate-950">{ROLE_LIMITS.free.quizzesPerMonth}/mes</p>
+            <p className="text-slate-500">Quizzes free/mes</p>
+            <p className="text-2xl font-black text-slate-950">{monthlyQuizzes ?? 0}/{ROLE_LIMITS.free.quizzesPerMonth}</p>
           </div>
           <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-100">
             <p className="text-slate-500">Global actives</p>
-            <p className="text-2xl font-black text-slate-950">{GLOBAL_LIMITS.maxActiveRoomsPublic}</p>
+            <p className="text-2xl font-black text-slate-950">{activeRooms ?? 0}/{GLOBAL_LIMITS.maxActiveRoomsPublic}</p>
           </div>
         </div>
       </Card>

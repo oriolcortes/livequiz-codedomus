@@ -113,7 +113,7 @@ export function useHostRoomController(room: Room) {
         const answer = payload as AnswerSubmittedPayload;
         const currentQuestion = quizRef.current?.questions[answer.questionIndex];
 
-        if (!currentQuestion || answer.questionIndex !== currentQuestionIndexRef.current) return;
+        if (statusRef.current !== "running" || !currentQuestion || answer.questionIndex !== currentQuestionIndexRef.current) return;
 
         setStudents((current) => {
           const existingStudent = current[answer.studentId];
@@ -248,12 +248,38 @@ export function useHostRoomController(room: Room) {
     statusRef.current = "ended";
     setStatus("ended");
     channelRef.current?.send({ type: "broadcast", event: realtimeEvents.quizEnded, payload: { entries: rankingRef.current } });
+    setLog((current) => ["Partida finalitzada. El rànquing queda visible fins que tanquis la sala.", ...current]);
+  }
+
+  function closeRoom() {
     startTransition(async () => {
       await endRoomAction(room.code);
       localStorage.removeItem(`livequiz:host:${room.code}:quiz`);
       router.push("/dashboard");
     });
   }
+
+  useEffect(() => {
+    function closeRoomOnPageHide() {
+      const endpoint = `/api/rooms/${encodeURIComponent(room.code)}/end`;
+      const body = JSON.stringify({ code: room.code });
+
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(endpoint, new Blob([body], { type: "application/json" }));
+        return;
+      }
+
+      void fetch(endpoint, {
+        method: "POST",
+        body,
+        headers: { "Content-Type": "application/json" },
+        keepalive: true
+      });
+    }
+
+    window.addEventListener("pagehide", closeRoomOnPageHide);
+    return () => window.removeEventListener("pagehide", closeRoomOnPageHide);
+  }, [room.code]);
 
   const currentQuestion = quiz?.questions[currentQuestionIndex];
 
@@ -287,6 +313,7 @@ export function useHostRoomController(room: Room) {
     ranking,
     loadQuizFile,
     startQuestion,
-    endQuiz
+    endQuiz,
+    closeRoom
   };
 }

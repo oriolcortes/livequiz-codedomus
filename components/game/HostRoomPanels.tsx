@@ -77,6 +77,7 @@ export function HostControlCard({
   pending,
   status,
   onEndQuiz,
+  onCloseRoom,
   onStartQuestion
 }: {
   quiz: Quiz | null;
@@ -86,6 +87,7 @@ export function HostControlCard({
   pending: boolean;
   status: "waiting" | "running" | "ended";
   onEndQuiz: () => void;
+  onCloseRoom: () => void;
   onStartQuestion: (index: number) => void;
 }) {
   return (
@@ -95,7 +97,10 @@ export function HostControlCard({
           <h2 className="text-xl font-black">Control de partida</h2>
           <p className="text-sm text-slate-600">Passa pregunta manualment per mantenir control a l'aula.</p>
         </div>
-        <Button variant="danger" onClick={onEndQuiz} disabled={pending || status === "ended"}>Finalitzar</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={onEndQuiz} disabled={pending || status === "ended"}>Finalitzar partida</Button>
+          <Button variant="danger" onClick={onCloseRoom} disabled={pending}>Tancar sala</Button>
+        </div>
       </div>
 
       {currentQuestion ? (
@@ -120,10 +125,10 @@ export function HostControlCard({
       )}
 
       <div className="mt-6 flex flex-wrap gap-3">
-        <Button disabled={!quiz || currentQuestionIndex + 1 >= (quiz?.questions.length ?? 0)} onClick={() => onStartQuestion(currentQuestionIndex + 1)}>
+        <Button disabled={status === "ended" || !quiz || currentQuestionIndex + 1 >= (quiz?.questions.length ?? 0)} onClick={() => onStartQuestion(currentQuestionIndex + 1)}>
           {currentQuestionIndex < 0 ? "Iniciar primera pregunta" : "Següent pregunta"}
         </Button>
-        <Button variant="secondary" disabled={!quiz || currentQuestionIndex < 0} onClick={() => onStartQuestion(currentQuestionIndex)}>
+        <Button variant="secondary" disabled={status === "ended" || !quiz || currentQuestionIndex < 0} onClick={() => onStartQuestion(currentQuestionIndex)}>
           Repetir pregunta
         </Button>
       </div>
